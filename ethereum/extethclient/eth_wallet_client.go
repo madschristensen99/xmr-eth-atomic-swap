@@ -464,8 +464,10 @@ func validateChainID(env common.Environment, chainID *big.Int) error {
 			return fmt.Errorf("expected Mainnet chain ID (%d), but found %s", common.MainnetChainID, chainID)
 		}
 	case common.Stagenet:
-		if chainID.Cmp(big.NewInt(common.SepoliaChainID)) != 0 {
-			return fmt.Errorf("expected Sepolia chain ID (%d), but found %s", common.SepoliaChainID, chainID)
+		// Accept both Sepolia (11155111) and Base Sepolia (84532) chain IDs
+		baseSepoliaChainID := int64(84532)
+		if chainID.Cmp(big.NewInt(common.SepoliaChainID)) != 0 && chainID.Cmp(big.NewInt(baseSepoliaChainID)) != 0 {
+			return fmt.Errorf("expected Sepolia chain ID (%d) or Base Sepolia chain ID (%d), but found %s", common.SepoliaChainID, baseSepoliaChainID, chainID)
 		}
 	case common.Development:
 		if chainID.Cmp(big.NewInt(common.GanacheChainID)) != 0 {
