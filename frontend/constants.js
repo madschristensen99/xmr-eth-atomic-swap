@@ -1,5 +1,5 @@
-export const SWAP_CREATOR_ADDRESS = "0xCa9209fAbc5B1fCF7935F99Ba588776222aB9c4c"; // Your contract address
-export const SWAP_CREATOR_ABI = [
+const SWAP_CREATOR_ADDRESS = "0xCa9209fAbc5B1fCF7935F99Ba588776222aB9c4c"; // Your contract address
+const SWAP_CREATOR_ABI = [
 	{
 		"inputs": [
 			{
@@ -601,5 +601,5 @@ export const SWAP_CREATOR_ABI = [
 		"type": "function"
 	}
 ]; // Your contract ABI
-export const CHAIN_ID = "0x14a34"; // Base Sepolia chain ID (e.g., "0x14a34" for 84532)
-export const RPC_URL = "https://sepolia.base.org"; // Base Sepolia RPC URL
+const CHAIN_ID = "0x14a34"; // Base Sepolia chain ID (e.g., "0x14a34" for 84532)
+const RPC_URL = "https://sepolia.base.org"; // Base Sepolia RPC URL

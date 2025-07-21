@@ -1,8 +1,60 @@
 // Swap functionality for the frontend
-import { SWAP_CREATOR_ADDRESS, SWAP_CREATOR_ABI } from './constants.js';
+// Using global constants SWAP_CREATOR_ADDRESS and SWAP_CREATOR_ABI
 
 // Server URL for API calls
 const SERVER_URL = 'http://localhost:5000';
+const PRICE_API_URL = 'https://api.coingecko.com/api/v3';
+
+// Cache for exchange rates
+const exchangeRateCache = {
+  xmrToUsdc: null,
+  lastUpdated: 0
+};
+
+// Fetch current XMR to USDC exchange rate
+async function fetchExchangeRate() {
+  try {
+    // Check if we have a cached rate that's less than 5 minutes old
+    const now = Date.now();
+    if (exchangeRateCache.xmrToUsdc && now - exchangeRateCache.lastUpdated < 5 * 60 * 1000) {
+      console.log('Using cached exchange rate:', exchangeRateCache.xmrToUsdc);
+      return exchangeRateCache.xmrToUsdc;
+    }
+    
+    // Fetch current prices from CoinGecko
+    const response = await fetch(`${PRICE_API_URL}/simple/price?ids=monero&vs_currencies=usd`);
+    const data = await response.json();
+    
+    // Update cache
+    exchangeRateCache.xmrToUsdc = data.monero.usd;
+    exchangeRateCache.lastUpdated = now;
+    
+    console.log('Fetched new exchange rate:', exchangeRateCache.xmrToUsdc);
+    return exchangeRateCache.xmrToUsdc;
+  } catch (error) {
+    console.error('Error fetching exchange rate:', error);
+    // Return last known rate or a fallback value
+    return exchangeRateCache.xmrToUsdc || 150; // Fallback value
+  }
+}
+
+// Convert between XMR and USDC based on current rate
+async function convertCurrency(amount, fromCurrency, toCurrency) {
+  if (!amount || isNaN(amount)) return '0';
+  
+  const rate = await fetchExchangeRate();
+  const amountNum = parseFloat(amount);
+  
+  if (fromCurrency === 'XMR' && toCurrency === 'USDC') {
+    // XMR to USDC: multiply by rate
+    return (amountNum * rate).toFixed(2);
+  } else if (fromCurrency === 'USDC' && toCurrency === 'XMR') {
+    // USDC to XMR: divide by rate
+    return (amountNum / rate).toFixed(6);
+  }
+  
+  return amount; // No conversion needed
+}
 
 // Connect to MetaMask
 async function connectWallet() {
@@ -254,11 +306,29 @@ document.addEventListener('DOMContentLoaded', () => {
     connectWalletBtn.addEventListener('click', async () => {
       try {
         const { address } = await connectWallet();
-        alert(`Connected to wallet: ${address}`);
+        connectWalletBtn.textContent = address.substring(0, 6) + '...' + address.substring(address.length - 4);
+        connectWalletBtn.classList.add('connected');
       } catch (error) {
+        console.error('Failed to connect wallet:', error);
         alert(`Failed to connect wallet: ${error.message}`);
       }
     });
+  }
+  
+  // Exchange rate display
+  const exchangeRateDisplay = document.getElementById('exchangeRate');
+  if (exchangeRateDisplay) {
+    const updateExchangeRateDisplay = async () => {
+      try {
+        const rate = await fetchExchangeRate();
+        exchangeRateDisplay.textContent = `1 XMR ≈ ${rate.toFixed(2)} USDC`;
+      } catch (error) {
+        console.error('Failed to update exchange rate display:', error);
+      }
+    };
+    
+    updateExchangeRateDisplay();
+    setInterval(updateExchangeRateDisplay, 60000); // Update every minute
   }
   
   // Create swap button
@@ -328,6 +398,31 @@ document.addEventListener('DOMContentLoaded', () => {
         receiverAddressField.style.display = 'block';
       } else {
         receiverAddressField.style.display = 'none';
+      }
+    });
+  }
+  
+  // Auto-convert amounts when input changes
+  // Reuse existing variables instead of redeclaring them
+  
+  if (sendAmount && receiveAmount) {
+    sendAmount.addEventListener('input', async () => {
+      if (sendAmount.value) {
+        const fromCurrency = sendCurrency.innerText.trim();
+        const toCurrency = receiveCurrency.innerText.trim();
+        receiveAmount.value = await convertCurrency(sendAmount.value, fromCurrency, toCurrency);
+      } else {
+        receiveAmount.value = '';
+      }
+    });
+    
+    receiveAmount.addEventListener('input', async () => {
+      if (receiveAmount.value) {
+        const fromCurrency = receiveCurrency.innerText.trim();
+        const toCurrency = sendCurrency.innerText.trim();
+        sendAmount.value = await convertCurrency(receiveAmount.value, fromCurrency, toCurrency);
+      } else {
+        sendAmount.value = '';
       }
     });
   }
