@@ -3,6 +3,74 @@
 // Server URL for API calls
 const SERVER_URL = 'http://localhost:5000';
 
+// Price API URL for fetching exchange rates
+const PRICE_API_URL = 'https://api.coingecko.com/api/v3';
+
+// Cache for exchange rates
+let exchangeRateCache = {
+  xmrToUsdc: null,
+  lastUpdated: 0
+};
+
+// Fetch current XMR to USDC exchange rate
+async function fetchExchangeRate() {
+  try {
+    // Check if we have a cached rate that's less than 5 minutes old
+    const now = Date.now();
+    if (exchangeRateCache.xmrToUsdc && now - exchangeRateCache.lastUpdated < 5 * 60 * 1000) {
+      console.log('Using cached exchange rate:', exchangeRateCache.xmrToUsdc);
+      return exchangeRateCache.xmrToUsdc;
+    }
+    
+    // Fetch current prices from CoinGecko
+    const response = await fetch(`${PRICE_API_URL}/simple/price?ids=monero&vs_currencies=usd`);
+    const data = await response.json();
+    
+    if (!data.monero || !data.monero.usd) {
+      throw new Error('Failed to fetch Monero price');
+    }
+    
+    // XMR to USD rate
+    const xmrToUsd = data.monero.usd;
+    
+    // Assuming 1 USDC = 1 USD (approximately)
+    const xmrToUsdc = xmrToUsd;
+    
+    // Update cache
+    exchangeRateCache = {
+      xmrToUsdc,
+      lastUpdated: now
+    };
+    
+    console.log('Fetched new exchange rate:', xmrToUsdc);
+    return xmrToUsdc;
+  } catch (error) {
+    console.error('Error fetching exchange rate:', error);
+    // Return a fallback rate if we have one cached, otherwise use a default
+    return exchangeRateCache.xmrToUsdc || 150; // Default fallback rate
+  }
+}
+
+// Calculate equivalent amount based on direction
+async function calculateEquivalentAmount(amount, fromCurrency, toCurrency) {
+  if (!amount || isNaN(parseFloat(amount))) {
+    return '';
+  }
+  
+  const rate = await fetchExchangeRate();
+  const amountNum = parseFloat(amount);
+  
+  if (fromCurrency === 'XMR' && toCurrency === 'USDC') {
+    // XMR to USDC: multiply by rate
+    return (amountNum * rate).toFixed(2);
+  } else if (fromCurrency === 'USDC' && toCurrency === 'XMR') {
+    // USDC to XMR: divide by rate
+    return (amountNum / rate).toFixed(6);
+  }
+  
+  return amount; // Same currency or unsupported pair
+}
+
 // Connect to MetaMask
 async function connectWallet() {
   if (window.ethereum) {
@@ -150,6 +218,63 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
+  // Initialize exchange rate display
+  const exchangeRateDisplay = document.getElementById('exchangeRate');
+  if (exchangeRateDisplay) {
+    // Update exchange rate initially and every 60 seconds
+    const updateExchangeRateDisplay = async () => {
+      try {
+        const rate = await fetchExchangeRate();
+        exchangeRateDisplay.textContent = `1 XMR ≈ ${rate.toFixed(2)} USDC`;
+      } catch (error) {
+        console.error('Failed to update exchange rate display:', error);
+      }
+    };
+    
+    updateExchangeRateDisplay();
+    setInterval(updateExchangeRateDisplay, 60000); // Update every minute
+  }
+
+  // Input amount handlers for dynamic conversion
+  const sendAmount = document.getElementById('sendAmount');
+  const receiveAmount = document.getElementById('receiveAmount');
+  const sendCurrency = document.getElementById('sendCurrency');
+  const receiveCurrency = document.getElementById('receiveCurrency');
+  
+  if (sendAmount && receiveAmount) {
+    // When send amount changes, update receive amount
+    sendAmount.addEventListener('input', async function() {
+      try {
+        const fromCurrency = sendCurrency.textContent.trim();
+        const toCurrency = receiveCurrency.textContent.trim();
+        const equivalentAmount = await calculateEquivalentAmount(
+          sendAmount.value,
+          fromCurrency,
+          toCurrency
+        );
+        receiveAmount.value = equivalentAmount;
+      } catch (error) {
+        console.error('Error calculating equivalent amount:', error);
+      }
+    });
+    
+    // When receive amount changes, update send amount
+    receiveAmount.addEventListener('input', async function() {
+      try {
+        const fromCurrency = receiveCurrency.textContent.trim();
+        const toCurrency = sendCurrency.textContent.trim();
+        const equivalentAmount = await calculateEquivalentAmount(
+          receiveAmount.value,
+          fromCurrency,
+          toCurrency
+        );
+        sendAmount.value = equivalentAmount;
+      } catch (error) {
+        console.error('Error calculating equivalent amount:', error);
+      }
+    });
+  }
+
   // Create swap button
   const createSwapBtn = document.getElementById('createSwapBtn');
   if (createSwapBtn) {
@@ -166,14 +291,26 @@ document.addEventListener('DOMContentLoaded', function() {
           return;
         }
         
+        // Show loading state
+        createSwapBtn.disabled = true;
+        createSwapBtn.textContent = 'Creating swap...';
+        
         if (sendCurrency === 'USDC' && receiveCurrency === 'XMR') {
           await initiateUsdcToXmrSwap(receiverAddress, sendAmount);
         } else if (sendCurrency === 'XMR' && receiveCurrency === 'USDC') {
           await initiateXmrToUsdcSwap(sendAmount, receiveAmount);
         }
+        
+        // Reset button state
+        createSwapBtn.disabled = false;
+        createSwapBtn.textContent = 'Create Swap';
       } catch (error) {
         console.error('Failed to create swap:', error);
         alert('Failed to create swap: ' + error.message);
+        
+        // Reset button state
+        createSwapBtn.disabled = false;
+        createSwapBtn.textContent = 'Create Swap';
       }
     });
   }
@@ -181,7 +318,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // Swap direction button
   const swapDirectionBtn = document.getElementById('swapDirection');
   if (swapDirectionBtn) {
-    swapDirectionBtn.addEventListener('click', function() {
+    swapDirectionBtn.addEventListener('click', async function() {
       const sendCurrency = document.getElementById('sendCurrency');
       const receiveCurrency = document.getElementById('receiveCurrency');
       const sendAmount = document.getElementById('sendAmount');
@@ -192,10 +329,17 @@ document.addEventListener('DOMContentLoaded', function() {
       sendCurrency.innerHTML = receiveCurrency.innerHTML;
       receiveCurrency.innerHTML = tempCurrency;
       
-      // Swap amounts
-      const tempAmount = sendAmount.value;
-      sendAmount.value = receiveAmount.value;
-      receiveAmount.value = tempAmount;
+      // Recalculate based on the new send amount
+      if (sendAmount.value) {
+        const fromCurrency = sendCurrency.textContent.trim();
+        const toCurrency = receiveCurrency.textContent.trim();
+        const equivalentAmount = await calculateEquivalentAmount(
+          sendAmount.value,
+          fromCurrency,
+          toCurrency
+        );
+        receiveAmount.value = equivalentAmount;
+      }
     });
   }
 });

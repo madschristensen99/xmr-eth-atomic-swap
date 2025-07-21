@@ -150,6 +150,16 @@ header {
     padding: 1.5rem 1rem;
 }
 
+.exchange-rate {
+    font-size: 0.9rem;
+    color: var(--dark);
+    background-color: var(--background);
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-weight: 600;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
 .swap-stages {
     display: flex;
     justify-content: space-between;
