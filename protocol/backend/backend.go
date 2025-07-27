@@ -25,6 +25,7 @@ import (
 	"github.com/athanorlabs/atomic-swap/db"
 	contracts "github.com/athanorlabs/atomic-swap/ethereum"
 	"github.com/athanorlabs/atomic-swap/ethereum/extethclient"
+	"github.com/athanorlabs/atomic-swap/ethereum/oneinch"
 	"github.com/athanorlabs/atomic-swap/monero"
 	"github.com/athanorlabs/atomic-swap/net/message"
 	"github.com/athanorlabs/atomic-swap/protocol/swap"
@@ -89,6 +90,10 @@ type Backend interface {
 	SwapManager() swap.Manager
 	SwapCreator() *contracts.SwapCreator
 	SwapCreatorAddr() ethcommon.Address
+	EscrowFactoryAddr() ethcommon.Address
+	EscrowAdapterAddr() ethcommon.Address
+	EscrowClient() (*oneinch.XMREscrowClient, error)
+	HasEscrowClient() bool
 	SwapTimeout() time.Duration
 	XMRDepositAddress(offerID *types.Hash) *mcrypto.Address
 
@@ -126,6 +131,11 @@ type backend struct {
 	swapCreator     *contracts.SwapCreator
 	swapCreatorAddr ethcommon.Address
 	swapTimeout     time.Duration
+	
+	// 1inch escrow contracts
+	escrowFactoryAddr ethcommon.Address
+	escrowAdapterAddr ethcommon.Address
+	escrowClient     *oneinch.XMREscrowClient
 
 	// network interface
 	NetSender
@@ -137,14 +147,16 @@ type backend struct {
 
 // Config is the config for the Backend
 type Config struct {
-	Ctx             context.Context
-	MoneroClient    monero.WalletClient
-	EthereumClient  extethclient.EthClient
-	Environment     common.Environment
-	SwapCreatorAddr ethcommon.Address
-	SwapManager     swap.Manager
-	RecoveryDB      RecoveryDB
-	Net             NetSender
+	Ctx              context.Context
+	MoneroClient     monero.WalletClient
+	EthereumClient   extethclient.EthClient
+	Environment      common.Environment
+	SwapCreatorAddr  ethcommon.Address
+	EscrowFactoryAddr ethcommon.Address
+	EscrowAdapterAddr ethcommon.Address
+	SwapManager      swap.Manager
+	RecoveryDB       RecoveryDB
+	Net              NetSender
 }
 
 // NewBackend returns a new Backend
@@ -158,20 +170,39 @@ func NewBackend(cfg *Config) (Backend, error) {
 		return nil, err
 	}
 
-	return &backend{
+	b := &backend{
 		ctx:                   cfg.Ctx,
 		env:                   cfg.Environment,
 		moneroWallet:          cfg.MoneroClient,
 		ethClient:             cfg.EthereumClient,
 		swapCreator:           swapCreator,
 		swapCreatorAddr:       cfg.SwapCreatorAddr,
+		escrowFactoryAddr:     cfg.EscrowFactoryAddr,
+		escrowAdapterAddr:     cfg.EscrowAdapterAddr,
 		swapManager:           cfg.SwapManager,
 		swapTimeout:           common.SwapTimeoutFromEnv(cfg.Environment),
 		NetSender:             cfg.Net,
 		perSwapXMRDepositAddr: make(map[types.Hash]*mcrypto.Address),
 		recoveryDB:            cfg.RecoveryDB,
 		relayerHash:           make(map[types.Hash][4]byte),
-	}, nil
+	}
+	
+	// Initialize escrow client if addresses are provided
+	if (cfg.EscrowFactoryAddr != ethcommon.Address{} && cfg.EscrowAdapterAddr != ethcommon.Address{}) {
+		escrowClient, err := oneinch.InitializeEscrowClient(
+			cfg.Ctx,
+			cfg.EthereumClient,
+			swapCreator,
+			cfg.EscrowFactoryAddr,
+			cfg.EscrowAdapterAddr,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize escrow client: %w", err)
+		}
+		b.escrowClient = escrowClient
+	}
+	
+	return b, nil
 }
 
 func (b *backend) XMRClient() monero.WalletClient {
@@ -200,6 +231,14 @@ func (b *backend) SwapCreator() *contracts.SwapCreator {
 
 func (b *backend) SwapCreatorAddr() ethcommon.Address {
 	return b.swapCreatorAddr
+}
+
+func (b *backend) EscrowFactoryAddr() ethcommon.Address {
+	return b.escrowFactoryAddr
+}
+
+func (b *backend) EscrowAdapterAddr() ethcommon.Address {
+	return b.escrowAdapterAddr
 }
 
 func (b *backend) Ctx() context.Context {
