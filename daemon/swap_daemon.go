@@ -39,14 +39,16 @@ var log = logging.Logger("daemon")
 
 // SwapdConfig provides startup parameters for swapd.
 type SwapdConfig struct {
-	EnvConf        *common.Config
-	MoneroClient   monero.WalletClient
-	EthereumClient extethclient.EthClient
-	Libp2pPort     uint16
-	Libp2pKeyfile  string
-	RPCPort        uint16
-	IsRelayer      bool
-	NoTransferBack bool
+	EnvConf           *common.Config
+	MoneroClient      monero.WalletClient
+	EthereumClient    extethclient.EthClient
+	Libp2pPort        uint16
+	Libp2pKeyfile     string
+	RPCPort           uint16
+	IsRelayer         bool
+	NoTransferBack    bool
+	EscrowFactoryAddr ethcommon.Address
+	EscrowAdapterAddr ethcommon.Address
 }
 
 // RunSwapDaemon assembles and runs a swapd instance blocking until swapd is
@@ -107,14 +109,16 @@ func RunSwapDaemon(ctx context.Context, conf *SwapdConfig) (err error) {
 	}()
 
 	swapBackend, err := backend.NewBackend(&backend.Config{
-		Ctx:             ctx,
-		MoneroClient:    conf.MoneroClient,
-		EthereumClient:  conf.EthereumClient,
-		Environment:     conf.EnvConf.Env,
-		SwapCreatorAddr: conf.EnvConf.SwapCreatorAddr,
-		SwapManager:     sm,
-		RecoveryDB:      sdb.RecoveryDB(),
-		Net:             host,
+		Ctx:              ctx,
+		MoneroClient:     conf.MoneroClient,
+		EthereumClient:   conf.EthereumClient,
+		Environment:      conf.EnvConf.Env,
+		SwapCreatorAddr:  conf.EnvConf.SwapCreatorAddr,
+		EscrowFactoryAddr: conf.EscrowFactoryAddr,
+		EscrowAdapterAddr: conf.EscrowAdapterAddr,
+		SwapManager:      sm,
+		RecoveryDB:       sdb.RecoveryDB(),
+		Net:              host,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to make backend: %w", err)

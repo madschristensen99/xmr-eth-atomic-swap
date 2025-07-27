@@ -44,11 +44,13 @@ type MoneroNode struct {
 
 // Config contains constants that are defaults for various environments
 type Config struct {
-	Env             Environment
-	DataDir         string
-	EthEndpoint     string
-	MoneroNodes     []*MoneroNode
-	SwapCreatorAddr ethcommon.Address
+	Env               Environment
+	DataDir           string
+	EthEndpoint       string
+	MoneroNodes       []*MoneroNode
+	SwapCreatorAddr   ethcommon.Address
+	EscrowFactoryAddr ethcommon.Address
+	EscrowAdapterAddr ethcommon.Address
 	Bootnodes       []string
 }
 

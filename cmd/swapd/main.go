@@ -511,15 +511,20 @@ func createSwapdConf(
 		}
 	}
 
+		// Load escrow contract addresses from environment variables
+	factoryAddr, adapterAddr := common.GetEscrowAddressesWithFallback()
+
 	return &daemon.SwapdConfig{
-		EnvConf:        envConf,
-		Libp2pPort:     uint16(libp2pPort),
-		Libp2pKeyfile:  libp2pKeyFile,
-		RPCPort:        uint16(rpcPort),
-		IsRelayer:      c.Bool(flagRelayer),
-		NoTransferBack: c.Bool(flagNoTransferBack),
-		MoneroClient:   mc,
-		EthereumClient: ec,
+		EnvConf:           envConf,
+		Libp2pPort:        uint16(libp2pPort),
+		Libp2pKeyfile:     libp2pKeyFile,
+		RPCPort:           uint16(rpcPort),
+		IsRelayer:         c.Bool(flagRelayer),
+		NoTransferBack:    c.Bool(flagNoTransferBack),
+		MoneroClient:      mc,
+		EthereumClient:    ec,
+		EscrowFactoryAddr: factoryAddr,
+		EscrowAdapterAddr: adapterAddr,
 	}, nil
 }
 
